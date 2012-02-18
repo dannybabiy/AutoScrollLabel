@@ -26,6 +26,12 @@ typedef enum  {
 @property (nonatomic) NSTimeInterval pauseInterval;
 @property (nonatomic) NSInteger labelSpacing; // pixels
 /**
+ * If the label should scroll automatically.
+ * @dsicussion If you want to manually manage the scroll, you can set this to NO
+ * and then make use of scrollLabelIfNeeded on a UITapGestureRecognizer for instance.
+ */
+@property (nonatomic) BOOL autoScroll;
+/**
  * The animation options used when scrolling the UILabels.
  * @discussion UIViewAnimationOptionAllowUserInteraction is always applied to the animations.
  */
@@ -42,6 +48,7 @@ typedef enum  {
 @property (nonatomic, asl_retain) UIColor *shadowColor;
 @property (nonatomic) CGSize shadowOffset;
 @property (nonatomic) UITextAlignment textAlignment; // only applies when not auto-scrolling
+@property (nonatomic) UILineBreakMode lineBreakMode; // only applies when not auto-scrolling
 
 /**
  * Lays out the scrollview contents, enabling text scrolling if the text will be clipped.

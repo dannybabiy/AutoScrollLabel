@@ -12,7 +12,7 @@
 
 #import "AutoScrollLabel.h"
 
-#define kLabelCount 2
+#define kLabelCount 3
 #define kDefaultLabelBufferSpace 20   // pixel buffer space between scrolling label
 #define kDefaultPixelsPerSecond 30
 #define kDefaultPauseTime 1.5f
@@ -38,6 +38,7 @@ static void each_object(NSArray *objects, void (^block)(id object))
 @synthesize scrollDirection = _scrollDirection;
 @synthesize pauseInterval = _pauseInterval;
 @synthesize labelSpacing = _labelSpacing;
+@synthesize autoScroll = _autoScroll;
 @synthesize scrollSpeed = _scrollSpeed;
 @synthesize text;
 @synthesize labels;
@@ -45,7 +46,8 @@ static void each_object(NSArray *objects, void (^block)(id object))
 @synthesize animationOptions;
 @synthesize shadowColor;
 @synthesize shadowOffset;
-@synthesize textAlignment;
+@synthesize textAlignment = _textAlignment;
+@synthesize lineBreakMode = _lineBreakMode;
 @synthesize scrolling = _isScrolling;
 
 - (id)initWithCoder:(NSCoder *)aDecoder
@@ -88,9 +90,11 @@ static void each_object(NSArray *objects, void (^block)(id object))
     // default values
 	_scrollDirection = AutoScrollDirectionLeft;
 	_scrollSpeed = kDefaultPixelsPerSecond;
+    _autoScroll = YES;
 	_pauseInterval = kDefaultPauseTime;
 	_labelSpacing = kDefaultLabelBufferSpace;
-    self.textAlignment = UITextAlignmentLeft;
+    _textAlignment = UITextAlignmentLeft;
+    _lineBreakMode = UILineBreakModeTailTruncation;
     self.animationOptions = UIViewAnimationCurveEaseIn;
 	self.showsVerticalScrollIndicator = NO;
 	self.showsHorizontalScrollIndicator = NO;
@@ -110,6 +114,18 @@ static void each_object(NSArray *objects, void (^block)(id object))
 - (UILabel *)mainLabel
 {
     return [self.labels objectAtIndex:0];
+}
+
+- (UILabel *)labelForNonAnimatedState
+{
+    return [self.labels objectAtIndex:2];
+}
+
+- (void)hideLabelForNonAnimatedState:(BOOL)hide {
+    each_object(self.labels, ^(UILabel *label) {
+        // Use alpha so that it is animatable.
+        label.alpha = (label == [self labelForNonAnimatedState]) ? !hide : hide;
+    });
 }
 
 - (void)setText:(NSString *)theText
@@ -162,6 +178,12 @@ static void each_object(NSArray *objects, void (^block)(id object))
 	[self refreshLabels];
 }
 
+- (void)setAutoScroll:(BOOL)value
+{
+    _autoScroll = value;
+    [self refreshLabels];
+}
+
 - (void)setScrollDirection:(AutoScrollDirection)direction
 {
 	_scrollDirection = direction;
@@ -192,31 +214,66 @@ static void each_object(NSArray *objects, void (^block)(id object))
     return self.mainLabel.shadowOffset;
 }
 
+- (void)setTextAlignment:(UITextAlignment)value
+{
+    _textAlignment = value;
+    [self refreshLabels];
+}
+
+- (void)setLineBreakMode:(UILineBreakMode)value
+{
+    _lineBreakMode = value;
+    [self refreshLabels];
+}
+
 #pragma mark - Misc
+
 - (void)scrollLabelIfNeeded
 {
     CGFloat labelWidth = CGRectGetWidth(self.mainLabel.bounds);
-	if (labelWidth <= CGRectGetWidth(self.bounds))
+	if (labelWidth <= CGRectGetWidth(self.bounds) || _isScrolling)
         return;
     
 	_isScrolling = YES;
+
     BOOL doScrollLeft = (self.scrollDirection == AutoScrollDirectionLeft);   
     self.contentOffset = (doScrollLeft ? CGPointZero : CGPointMake(labelWidth + _labelSpacing, 0));
 
     // animate the scrolling
+    UIViewAnimationOptions fadeAnimOptions = UIViewAnimationOptionCurveLinear | UIViewAnimationOptionAllowUserInteraction;
+    NSTimeInterval fadeDuration = 0;
+
+    if (_autoScroll) {
+        [self hideLabelForNonAnimatedState:YES];
+    } else {
+        fadeDuration = .4;
+        [UIView animateWithDuration:fadeDuration delay:0 options:fadeAnimOptions animations:^{
+            [self hideLabelForNonAnimatedState:YES];
+        } completion:nil];
+    }
+
     NSTimeInterval duration = labelWidth / self.scrollSpeed;
-    [UIView animateWithDuration:duration delay:0 options:self.animationOptions | UIViewAnimationOptionAllowUserInteraction animations:^{
+    UIViewAnimationOptions animOptions = self.animationOptions | UIViewAnimationOptionAllowUserInteraction;
+    [UIView animateWithDuration:duration delay:fadeDuration/2 options:animOptions animations:^{
         // adjust offset
         self.contentOffset = (doScrollLeft ? CGPointMake(labelWidth + _labelSpacing, 0) : CGPointZero);
     } completion:^(BOOL finished) {
-        _isScrolling = NO;
-        
         // setup pause delay/loop
-        if (finished)
+        if (_autoScroll)
         {
+            _isScrolling = NO;
             [self performSelector:@selector(scrollLabelIfNeeded) 
                        withObject:nil
                        afterDelay:self.pauseInterval];
+        } else {
+            // Reset
+            self.contentOffset = (doScrollLeft ? CGPointZero : CGPointMake(labelWidth + _labelSpacing, 0));
+
+            [UIView animateWithDuration:fadeDuration delay:0 options:fadeAnimOptions animations:^{
+                [self hideLabelForNonAnimatedState:NO];
+            } completion:^(BOOL finished) {
+                _isScrolling = NO;
+            }];
         }
     }];
 }
@@ -243,49 +300,27 @@ static void each_object(NSArray *objects, void (^block)(id object))
         offset += CGRectGetWidth(label.bounds) + _labelSpacing; 
     });
 
+    // Setup the label for non animated state.
+    // If the label will be truncated, leave it left aligned for better alignment.
+    if ([self labelForNonAnimatedState].bounds.size.width < self.bounds.size.width) {
+        [self labelForNonAnimatedState].textAlignment = _textAlignment;
+    } else {
+        [self labelForNonAnimatedState].textAlignment = UITextAlignmentLeft;
+    }
+    [self labelForNonAnimatedState].frame = self.bounds;
+    [self labelForNonAnimatedState].lineBreakMode = _lineBreakMode;
+
 	CGSize size;
 	size.width = CGRectGetWidth(self.mainLabel.bounds) + CGRectGetWidth(self.bounds) + _labelSpacing;
 	size.height = CGRectGetHeight(self.bounds);
 	self.contentSize = size;
 	self.contentOffset = CGPointZero;
-    
-	// If the label is bigger than the space allocated, then it should scroll
-	if (CGRectGetWidth(self.mainLabel.bounds) > CGRectGetWidth(self.bounds))
-    {
-        each_object(self.labels, ^(UILabel *label) {
-            label.hidden = NO;
-		});
-        
-		[self scrollLabelIfNeeded];
-	}
-    else
-    {
-		// Hide the other labels out of view
-		each_object(self.labels, ^(UILabel *label) {
-            if (self.mainLabel != label)
-                label.hidden = YES;
-		});
-        
-        // adjust the scroll view
-        self.contentSize = self.bounds.size;
-        
-		// adjust label alignment
-        switch (self.textAlignment)
-        {
-            case UITextAlignmentCenter:
-                self.mainLabel.center = CGPointMake(self.center.x, CGRectGetMidY(self.bounds));
-                break;
-                
-            case UITextAlignmentLeft:
-                self.mainLabel.frame = self.bounds;
-                break;
-                
-            default:
-                //TODO: implement right alignment support
-                break;
-        }
-        
-        self.mainLabel.hidden = NO;
-	}
+
+    // Show non animated label and hide others.
+    [self hideLabelForNonAnimatedState:NO];
+
+    if (_autoScroll) {
+        [self scrollLabelIfNeeded];
+    }
 }
 @end
