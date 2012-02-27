@@ -246,7 +246,7 @@ static void each_object(NSArray *objects, void (^block)(id object))
     if (_autoScroll) {
         [self hideLabelForNonAnimatedState:YES];
     } else {
-        fadeDuration = .4;
+        fadeDuration = .5;
         [UIView animateWithDuration:fadeDuration delay:0 options:fadeAnimOptions animations:^{
             [self hideLabelForNonAnimatedState:YES];
         } completion:nil];
@@ -254,7 +254,7 @@ static void each_object(NSArray *objects, void (^block)(id object))
 
     NSTimeInterval duration = labelWidth / self.scrollSpeed;
     UIViewAnimationOptions animOptions = self.animationOptions | UIViewAnimationOptionAllowUserInteraction;
-    [UIView animateWithDuration:duration delay:fadeDuration/2 options:animOptions animations:^{
+    [UIView animateWithDuration:duration delay:fadeDuration options:animOptions animations:^{
         // adjust offset
         self.contentOffset = (doScrollLeft ? CGPointMake(labelWidth + _labelSpacing, 0) : CGPointZero);
     } completion:^(BOOL finished) {
@@ -301,12 +301,7 @@ static void each_object(NSArray *objects, void (^block)(id object))
     });
 
     // Setup the label for non animated state.
-    // If the label will be truncated, leave it left aligned for better alignment.
-    if ([self labelForNonAnimatedState].bounds.size.width < self.bounds.size.width) {
-        [self labelForNonAnimatedState].textAlignment = _textAlignment;
-    } else {
-        [self labelForNonAnimatedState].textAlignment = UITextAlignmentLeft;
-    }
+    [self labelForNonAnimatedState].textAlignment = _textAlignment;
     [self labelForNonAnimatedState].frame = self.bounds;
     [self labelForNonAnimatedState].lineBreakMode = _lineBreakMode;
 
