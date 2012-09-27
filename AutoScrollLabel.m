@@ -77,6 +77,7 @@ static void each_object(NSArray *objects, void (^block)(id object))
 		UILabel *label = [[UILabel alloc] init];
 		label.textColor = [UIColor whiteColor];
 		label.backgroundColor = [UIColor clearColor];
+		label.autoresizingMask = UIViewAutoresizingFlexibleWidth;
         
         // store labels
 		[self addSubview:label];
